@@ -9,7 +9,8 @@ from multiprocessing import Pool
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 module_path = os.path.join(CURRENT_DIR, "..", "..")
 sys.path.append(module_path)
-import autoregressive_process.autoregressive_process as arp
+from gbarp_gen.python import gbAR, constant_alpha
+from entropy_limits import ar_min_entropy_limit
 
 
 def count_byte_frequencies(random_bytes):
@@ -140,7 +141,7 @@ def aggregate_frequencies(g, alpha, alpha_scaling_factor, num_bytes, distance_sc
     aggregate_freq_dict = {}
 
     for _ in range(g):
-        random_bytes = arp.gbAR(alpha, 1 - alpha_scaling_factor, num_bytes)
+        random_bytes = gbAR(alpha, 1 - alpha_scaling_factor, num_bytes)
         freq_dict = count_bit_frequencies(random_bytes, distance_scale_p)
 
         for bit_chunk, freq in freq_dict.items():
@@ -159,7 +160,7 @@ def aggregate_frequencies(g, alpha, alpha_scaling_factor, num_bytes, distance_sc
 def generate_and_count(
     run_id, alpha, alpha_scaling_factor, num_bytes, distance_scale_p
 ):
-    random_bytes = arp.gbAR(alpha, 1 - alpha_scaling_factor, num_bytes)
+    random_bytes = gbAR(alpha, 1 - alpha_scaling_factor, num_bytes)
     tmp_freq_dict = count_bit_frequencies(random_bytes, distance_scale_p)
     return tmp_freq_dict
 
@@ -253,7 +254,7 @@ def generate_average_conditional_min_entropy_n_bits_csv(
             alpha, alpha_scaling_factor, num_bytes, distance_scale_p, gen_runs
         )
 
-        min_entropy_limit = arp.ar_min_entropy_limit(beta)
+        min_entropy_limit = ar_min_entropy_limit(beta)
         key = (alpha_scaling_factor, min_entropy_limit)
 
         for n_cond in range(1 + n_cond_max):
@@ -337,8 +338,8 @@ if __name__ == "__main__":
     distance_scale_p = 2
 
     # TODO: change the alpha generating function, you can use the following functions:
-    # {arp.exponentially_decreasing_alpha, arp.point_to_point_alpha, arp.gaussian_alpha, arp.constant_alpha, arp.constant_alpha}
-    alpha_generating_function = arp.constant_alpha
+    # {exponentially_decreasing_alpha, point_to_point_alpha, gaussian_alpha, constant_alpha}
+    alpha_generating_function = constant_alpha
 
     # TODO: change the signs to generate the constant alpha sequence
     # for example signs = [1, -1]

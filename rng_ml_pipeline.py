@@ -7,7 +7,14 @@ import subprocess
 import numpy as np
 
 from utils.nice_log import nice_log
-import autoregressive_process.autoregressive_process as arp
+from gbarp_gen.python import (
+    gbAR,
+    point_to_point_alpha,
+    constant_alpha,
+    exponentially_decreasing_alpha,
+    gaussian_alpha,
+)
+from entropy_limits import ar_min_entropy_limit
 from parsers.entropy_parsers import parse_entropy_output
 
 OUTPUT_FILE_PATH = "./results"
@@ -111,17 +118,17 @@ def generate_gbAR_random_bytes(alpha_scaling_factor, data_param_dict, beta, num_
     distance_scale_p = data_param_dict["distance_scale_p"]
     autocorrelation_function = data_param_dict["autocorrelation_function"]
     if autocorrelation_function == "point-to-point":
-        alpha = arp.point_to_point_alpha(distance_scale_p, alpha_scaling_factor)
+        alpha = point_to_point_alpha(distance_scale_p, alpha_scaling_factor)
     elif autocorrelation_function == "constant":
-        alpha = arp.constant_alpha(distance_scale_p, alpha_scaling_factor)
+        alpha = constant_alpha(distance_scale_p, alpha_scaling_factor)
     elif autocorrelation_function == "exponential":
-        alpha = arp.exponentially_decreasing_alpha(
+        alpha = exponentially_decreasing_alpha(
             distance_scale_p,
             alpha_scaling_factor,
             decay_rate=data_param_dict["exponential_decay_rate"],
         )
     elif autocorrelation_function == "gaussian":
-        alpha = arp.gaussian_alpha(
+        alpha = gaussian_alpha(
             distance_scale_p,
             alpha_scaling_factor,
             data_param_dict["gaussian_sigma"],
@@ -129,13 +136,13 @@ def generate_gbAR_random_bytes(alpha_scaling_factor, data_param_dict, beta, num_
         )
     elif "constant_" in autocorrelation_function:
         signs = data_param_dict["signs"]
-        alpha = arp.constant_alpha(distance_scale_p, alpha_scaling_factor, signs=signs)
+        alpha = constant_alpha(distance_scale_p, alpha_scaling_factor, signs=signs)
     else:
         raise ValueError("Unknown autocorrelation function.")
 
     assert beta >= 0
     assert np.sum(np.abs(alpha)) + beta - 1 < 1e-10
-    return arp.gbAR(alpha, beta, num_bytes), alpha
+    return gbAR(alpha, beta, num_bytes), alpha
 
 
 def generate_evaluation_checkpoints(start_order, end_order, num_points_per_order=2):
@@ -256,7 +263,7 @@ def main(model_param_dict, data_param_dict, model_name, hardware, gpu_cooldown=0
         save_random_data(random_bytes, data_target_file, sample_target_file)
         
         p_c_source = calculate_p_c(random_bytes)
-        min_entropy_th = arp.ar_min_entropy_limit(beta)
+        min_entropy_th = ar_min_entropy_limit(beta)
         
         nist = NistEntropyAssessment(sample_target_file).start()
         ml_results = model_runner.run(model_param_dict)

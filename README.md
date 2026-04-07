@@ -54,6 +54,18 @@ conda config --set solver libmamba
 conda install --file requirements.txt -c pytorch -c nvidia
 ```
 
+### gbarp_gen (gbAR(p) generator)
+
+The [gbarp_gen](https://github.com/qursa-uc3m/gbarp_gen) submodule provides the gbAR(p) process generator used for correlated binary sequence generation.
+
+```bash
+git submodule update --init --recursive
+chmod +x ./installation_scripts/gbarp_gen_installation.sh
+./installation_scripts/gbarp_gen_installation.sh
+```
+
+This initializes the submodule and builds the optional C backend for faster generation.
+
 ## RCNN model
 
 This is the original version of the program from here: [Machine Learning Cryptanalysis of a Quantum Random Number Generator](https://github.com/NeuroSyd/Machine-Learning-Cryptanalysis-of-a-Quantum-Random-Number-Generator)
