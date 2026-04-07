@@ -152,7 +152,7 @@ def generate_evaluation_checkpoints(start_order, end_order, num_points_per_order
 
 
 class ModelRunner:
-    """Runs ML models (GPT-2 or RCNN) with model-specific configurations."""
+    """Runs ML models (GPT-2, nanoGPT, or RCNN) with model-specific configurations."""
     
     MODEL_DEFAULTS = {
         "gpt2": {
@@ -163,6 +163,17 @@ class ModelRunner:
                 "n_embd": 256,   # embedding dimension
                 "n_layer": 3,    # transformer layers
                 "n_head": 4,     # attention heads
+            },
+            "remove_keys": [],
+        },
+        "nanogpt": {
+            "batch_size": 8,
+            "model_size_parameters": lambda p: {
+                "block_size": p["seqlen"],
+                "n_embd": 256,   # embedding dimension
+                "n_layer": 3,    # transformer layers
+                "n_head": 4,     # attention heads
+                "dropout": 0.0,
             },
             "remove_keys": [],
         },
@@ -184,6 +195,8 @@ class ModelRunner:
         if self._module is None:
             if self.model_name == "gpt2":
                 from models.gpt2 import rng_gpt2 as module
+            elif self.model_name == "nanogpt":
+                from models.nanogpt import rng_nanogpt as module
             elif self.model_name == "rcnn":
                 from models.rcnn import rng_rcnn as module
             self._module = module

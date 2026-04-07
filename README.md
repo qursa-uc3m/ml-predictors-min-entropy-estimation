@@ -6,13 +6,14 @@ This is the code repository for our work:
 
 [Read the full paper on arXiv](https://arxiv.org/abs/2406.19983)
 
-It contains autoregressive data generation, training and evaluation of two machine learning models (**RCNN** and **GPT-2**), a pipeline for running the experiments, and data analysis scripts.
+It contains autoregressive data generation, training and evaluation of three machine learning models (**RCNN**, **GPT-2**, and **nanoGPT**), a pipeline for running the experiments, and data analysis scripts.
 
 ## Table of Contents
 
 - [Installation](#installation)
   - [With conda](#with-conda)
 - [RCNN model](#rcnn-model)
+- [nanoGPT model](#nanogpt-model)
 - [Models Usage](#models-usage)
 - [Pipeline](#pipeline)
   - [Usage](#usage)
@@ -61,9 +62,69 @@ See also: [Machine Learning Cryptanalysis of a Quantum Random Number Generator |
 
 This is a modified version of `rng_rcnn` with optimizations that allow training and evaluating the model on batches of data instead of the entire data at once. It also allows training and evaluating the model on bit sequences instead of bytes.
 
+## nanoGPT model
+
+A minimal GPT implementation based on [Andrej Karpathy's nanoGPT](https://github.com/karpathy/nanoGPT). This model provides:
+
+- **Minimal architecture**: Simplified transformer optimized for binary sequences
+- **Flash Attention**: Leverages PyTorch 2.0+ efficient attention kernels
+- **Mixed precision training**: Uses `torch.amp.autocast` and `GradScaler`
+- **Memory-efficient**: Memory-mapped file support for large datasets
+
+### nanoGPT Installation
+
+nanoGPT requires downloading the official model from [Karpathy's nanoGPT repository](https://github.com/karpathy/nanoGPT):
+
+```bash
+chmod +x ./installation_scripts/nanogpt_installation.sh
+./installation_scripts/nanogpt_installation.sh
+```
+
+This downloads `model.py` to `models/nanogpt/`. Our wrapper (`wrapper.py`) adapts it to our pipeline interface.
+
+### nanoGPT Architecture
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `block_size` | seqlen | Maximum context window (sequence length) |
+| `n_embd` | 256 | Embedding dimension |
+| `n_layer` | 4 | Number of transformer layers |
+| `n_head` | 4 | Number of attention heads |
+| `dropout` | 0.0 | Dropout rate |
+
+### nanoGPT Usage
+
+```bash
+python -m models.nanogpt.rng_nanogpt \
+    --filename ./data/random_bytes.bin \
+    --generator test \
+    --seqlen 100 \
+    --step 100 \
+    --num_bytes 1000000 \
+    --target_bits 1 \
+    --train_ratio 0.8 \
+    --test_ratio 0.2 \
+    --learning_rate 0.0003 \
+    --batch_size 8 \
+    --epochs 1
+```
+
+Or via the pipeline:
+
+```bash
+python rng_ml_pipeline.py \
+    --model_name nanogpt \
+    --hardware RTX3060Ti \
+    --num_bytes 1000000 \
+    --target_bits 1 \
+    --corr_intensities 0.5 \
+    --seqlen 100 \
+    --batch_size 8
+```
+
 ## Models Usage
 
-Both models share most of the input parameters:
+All three models (RCNN, GPT-2, nanoGPT) share most of the input parameters:
 
 ```bash
 python -m <model_module> \
@@ -81,7 +142,11 @@ python -m <model_module> \
     --evaluation_checkpoints 1 2 3 4 5 6 7 8 9 10
 ```
 
-where model_module is one of `models.rcnn.rng_rcnn` or `models.gpt2.rng_gpt2`.
+where model_module is one of:
+
+- `models.rcnn.rng_rcnn` (RCNN)
+- `models.gpt2.rng_gpt2` (GPT-2)
+- `models.nanogpt.rng_nanogpt` (nanoGPT)
 
 - `--filename`: Name of the file containing the data you want to use for training the model. This is the only required parameter.
 - `--generator`: Type of the generator used to generate the data. This parameter is used for naming the output files.
@@ -106,7 +171,7 @@ where model_module is one of `models.rcnn.rng_rcnn` or `models.gpt2.rng_gpt2`.
 nohup python rng_ml_pipeline.py --num_bytes 10000000 --target_bits 1 2 3 4 5 6 7 8 --corr_intensities 0.5 --model_name gpt2 --distance_scale_p 10 --batch_size 128 --autocorrelation_function constant --learning_rate 0.0005 --hardware RTX3060Ti &
 ```
 
-- `--model_name`: This sets the model name. Default is 'gpt2'. Possible values include 'rcnn', 'gpt2', etc.
+- `--model_name`: This sets the model name. Default is 'gpt2'. Possible values: 'rcnn', 'gpt2', 'nanogpt'.
 - `--hardware`: This specifies the hardware being used. Must be provided explicitly (e.g., 'RTX3060Ti', 'g5.xlarge').
 
 - `--corr_intensities`: This sets the correlation intensities. Provide as space-separated values (e.g., '0.1 0.2 0.3'). Defaults to a linspace-generated array if not provided.
