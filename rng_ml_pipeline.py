@@ -209,7 +209,7 @@ class ModelRunner:
             self._module = module
         return self._module
     
-    def run(self, params):
+    def run(self, params, distillation_mode=None, distillation_config=None):
         module = self._load_module()
         run_params = params.copy()
         
@@ -221,10 +221,17 @@ class ModelRunner:
         
         run_params["model_size_parameters"] = self.config["model_size_parameters"](run_params)
         
+        if distillation_mode is not None:
+            from distillation import get_strategy, DistillationTrainer
+            strategy = get_strategy(distillation_mode, **(distillation_config or {}))
+            trainer = DistillationTrainer(strategy, distillation_config)
+            return trainer.run(module, run_params)
+        
         return module.main(**run_params)
 
 
-def main(model_param_dict, data_param_dict, model_name, hardware, gpu_cooldown=0):
+def main(model_param_dict, data_param_dict, model_name, hardware,
+         gpu_cooldown=0, distillation_mode=None, distillation_config=None):
     print("=" * 60)
     nice_log(f"Running model [{model_name}]", color="green")
     print(f"  Data: {model_param_dict['num_bytes']} bytes, "
@@ -266,7 +273,11 @@ def main(model_param_dict, data_param_dict, model_name, hardware, gpu_cooldown=0
         min_entropy_th = ar_min_entropy_limit(beta)
         
         nist = NistEntropyAssessment(sample_target_file).start()
-        ml_results = model_runner.run(model_param_dict)
+        ml_results = model_runner.run(
+            model_param_dict,
+            distillation_mode=distillation_mode,
+            distillation_config=distillation_config,
+        )
         entropies_dict = nist.wait()
 
         base_result = {
@@ -290,10 +301,12 @@ def main(model_param_dict, data_param_dict, model_name, hardware, gpu_cooldown=0
             "gaussian_sigma": data_param_dict["gaussian_sigma"],
             "p_c_source": p_c_source,
             "min_entropy_th": min_entropy_th,
+            "distillation_mode": distillation_mode or "-",
             **entropies_dict,
         }
 
-        ml_info = {k: v for k, v in ml_results.items() if k != "eval_results"}
+        ml_info = {k: v for k, v in ml_results.items()
+                   if k not in ("eval_results", "teacher_eval")}
 
         for partial_eval in ml_results["eval_results"]:
             eval_result = partial_eval["eval"]
@@ -309,6 +322,13 @@ def main(model_param_dict, data_param_dict, model_name, hardware, gpu_cooldown=0
                 "bytes_processed_eval": partial_eval["bytes_processed_eval"],
                 "min_entropy_estimated": experimental_min_entropy(eval_result["p_ml"], target_bits),
             }
+
+            # Include teacher metrics when in distillation mode
+            teacher_eval = ml_results.get("teacher_eval")
+            if teacher_eval is not None:
+                output_dict["teacher_p_ml"] = teacher_eval["p_ml"]
+                output_dict["teacher_ce_loss"] = teacher_eval["bin_cross-entropy_loss"]
+
             write_results_to_csv(output_dict, results_dir)
 
         os.remove(data_target_file)
@@ -397,6 +417,31 @@ def parse_arguments():
         type=int,
         default=0,
         help="Seconds to wait between runs for GPU cooldown (default: 0, use 180 for production)",
+    )
+    parser.add_argument(
+        "--distillation_mode",
+        type=str,
+        default=None,
+        choices=["rad", "vad", "irbc"],
+        help="Distillation strategy: rad (REINFORCE), vad (Gumbel-Softmax), irbc (Behaviour Cloning)",
+    )
+    parser.add_argument(
+        "--distillation_steps",
+        type=int,
+        default=5,
+        help="Number of autoregressive rollout steps for distillation (default: 5)",
+    )
+    parser.add_argument(
+        "--distillation_lr",
+        type=float,
+        default=None,
+        help="Learning rate for student distillation (default: same as --learning_rate)",
+    )
+    parser.add_argument(
+        "--distillation_epochs",
+        type=int,
+        default=None,
+        help="Epochs for student distillation (default: same as --epochs)",
     )
     args = parser.parse_args()
 
@@ -503,10 +548,23 @@ if __name__ == "__main__":
         "gaussian_sigma": gaussian_sigma,
     }
 
+    # Build distillation config from CLI args (only if distillation_mode is set)
+    distillation_config = None
+    if args.distillation_mode is not None:
+        distillation_config = {
+            "num_steps": args.distillation_steps,
+        }
+        if args.distillation_lr is not None:
+            distillation_config["learning_rate"] = args.distillation_lr
+        if args.distillation_epochs is not None:
+            distillation_config["epochs"] = args.distillation_epochs
+
     main(
         model_param_dict,
         data_param_dict,
         args.model_name,
         args.hardware,
         gpu_cooldown=args.gpu_cooldown,
+        distillation_mode=args.distillation_mode,
+        distillation_config=distillation_config,
     )
